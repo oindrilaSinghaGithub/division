@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Long Division — Stepwise (Fun Edition)</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #d9faff 0%, #fcefff 100%);
+    padding: 20px;
+    text-align: center;
+    position: relative;
+  }
+
+  h2 {
+    font-family: 'Comic Sans MS', cursive;
+    color: #333;
+    margin-bottom: 15px;
+    text-shadow: 1px 1px #fff;
+  }
+
+  .controls {
+    margin-bottom: 15px;
+    background: rgba(255,255,255,0.8);
+    padding: 10px 15px;
+    border-radius: 12px;
+    display: inline-block;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+  }
+
+  label {
+    font-weight: bold;
+    margin: 0 5px;
+  }
+
+  input[type="number"] {
+    padding: 6px;
+    width: 80px;
+    font-size: 15px;
+    margin-left: 4px;
+    border: 2px solid #ffb3ba;
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  button {
+    padding: 8px 14px;
+    font-size: 15px;
+    margin: 4px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #ffdfba;
+    color: #333;
+    font-weight: bold;
+    transition: transform 0.15s ease, background 0.2s ease;
+  }
+
+  button:hover:not(:disabled) {
+    background: #ffb347;
+    transform: scale(1.05);
+  }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  #area {
+    display: inline-block;
+    text-align: left;
+    background: #fff;
+    border: 3px solid #a0e7e5;
+    padding: 16px;
+    border-radius: 15px;
+    min-width: 420px;
+    white-space: pre;
+    font-family: "Courier New", monospace;
+    font-size: 17px;
+    line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    margin-top: 15px;
+  }
+
+  #status {
+    margin-top: 10px;
+    color: #222;
+    font-size: 15px;
+    font-weight: bold;
+    background: #b5ead7;
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  }
+</style>
+</head>
+<body>
+  <h2>🐣 Fun Long Division — Stepwise</h2>
+
+  <div class="controls">
+    <label>Dividend: <input id="dividend" type="number" value="289"></label>
+    <label>Divisor: <input id="divisor" type="number" value="3"></label><br>
+    <button id="startBtn">Start</button>
+    <button id="prevBtn" disabled>⬅ Prev</button>
+    <button id="nextBtn" disabled>Next ➡</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div id="area"></div>
+  <div id="status"></div>
+
+<script>
+function blank(len) { return ' '.repeat(len); }
+function writeAt(line, text, idx) {
+  if (idx < 0) idx = 0;
+  let arr = line.split('');
+  for (let i = 0; i < text.length; i++) {
+    const p = idx + i;
+    if (p >= arr.length) {
+      arr = arr.concat(Array(p - arr.length + 1).fill(' '));
+      arr.push(text[i]);
+    } else arr[p] = text[i];
+  }
+  return arr.join('');
+}
+
+function computeEvents(dividendStr, divisor) {
+  const digits = dividendStr.split('').map(d => +d);
+  const n = digits.length;
+  const events = [];
+  let pos = 0;
+  let current = digits[0];
+  let quotientSoFar = '';
+
+  while (pos < n) {
+    while (current < divisor && pos + 1 < n) {
+      pos++;
+      current = current * 10 + digits[pos];
+    }
+    if (current < divisor) break;
+
+    const qd = Math.floor(current / divisor);
+    const sub = qd * divisor;
+    const rem = current - sub;
+    quotientSoFar += String(qd);
+
+    events.push({type: 'updateHeader', quotient: quotientSoFar});
+    events.push({type: 'sub', prefixEnd: pos, value: sub});
+    events.push({type: 'underline', prefixEnd: pos, width: String(sub).length});
+    events.push({type: 'remainder', prefixEnd: pos, value: rem});
+
+    if (pos + 1 < n) {
+      events.push({type: 'pause'});
+      const bring = rem * 10 + digits[pos + 1];
+      events.push({type: 'bringdown', prefixEnd: pos + 1, value: bring});
+      current = bring;
+      pos++;
+    } else {
+      current = rem;
+      pos++;
+      break;
+    }
+  }
+
+  const finalQuotient = quotientSoFar === '' ? '0' : quotientSoFar;
+  const finalRemainder = current;
+  return { events, finalQuotient, finalRemainder };
+}
+
+function buildSnapshots(dividendStr, divisor, events) {
+  const divisorStr = String(divisor);
+  const leftPad = 2;
+  const leftPart = divisorStr + ' ) ';
+  const startCol = leftPad + leftPart.length;
+  const n = dividendStr.length;
+  const barPos = startCol + n + 1;
+  const totalWidth = barPos + 20;
+
+  function buildHeader(quot) {
+    let h = blank(totalWidth);
+    h = writeAt(h, ' '.repeat(leftPad) + leftPart + dividendStr, 0);
+    h = writeAt(h, '|', barPos);
+    if (quot) h = writeAt(h, ' ' + quot, barPos + 1);
+    return h;
+  }
+
+  const snapshots = [];
+  let lines = [ buildHeader('') ];
+  snapshots.push(lines.join('\n'));
+
+  for (let ev of events) {
+    if (ev.type === 'updateHeader') {
+      lines[0] = buildHeader(ev.quotient);
+    } else if (ev.type === 'sub') {
+      const lastCol = startCol + ev.prefixEnd;
+      const subStr = String(ev.value);
+      const subStart = lastCol - (subStr.length - 1);
+      let l = blank(totalWidth);
+      l = writeAt(l, '-' + subStr, subStart - 1);
+      lines.push(l);
+    } else if (ev.type === 'underline') {
+      const underlineStart = (startCol + ev.prefixEnd) - (ev.width - 1);
+      let l = blank(totalWidth);
+      l = writeAt(l, '_'.repeat(ev.width), underlineStart);
+      lines.push(l);
+    } else if (ev.type === 'remainder') {
+      const lastCol = startCol + ev.prefixEnd;
+      const remStr = String(ev.value);
+      const remStart = lastCol - (remStr.length - 1);
+      let l = blank(totalWidth);
+      l = writeAt(l, remStr, remStart);
+      lines.push(l);
+    } else if (ev.type === 'pause') {
+      lines.push(blank(totalWidth));
+    } else if (ev.type === 'bringdown') {
+      const pos = ev.prefixEnd;
+      const bringStr = String(ev.value);
+      const lastCol = startCol + pos;
+      const bringStart = lastCol - (bringStr.length - 1);
+      let l = blank(totalWidth);
+      l = writeAt(l, bringStr, bringStart);
+      lines.push(l);
+    }
+    snapshots.push(lines.join('\n'));
+  }
+
+  return { snapshots, totalWidth };
+}
+
+const startBtn = document.getElementById('startBtn');
+const nextBtn  = document.getElementById('nextBtn');
+const prevBtn  = document.getElementById('prevBtn');
+const resetBtn = document.getElementById('resetBtn');
+const area = document.getElementById('area');
+const status = document.getElementById('status');
+
+let snapshots = [], idx = 0, finalQ = null, finalR = null;
+
+startBtn.onclick = () => {
+  const dividend = (document.getElementById('dividend').value || '').trim();
+  const divisor  = parseInt(document.getElementById('divisor').value, 10);
+  if (!/^\d+$/.test(dividend) || isNaN(divisor) || divisor <= 0) {
+    area.textContent = 'Enter a positive integer dividend and divisor (>0).';
+    status.textContent = '';
+    return;
+  }
+
+  const { events, finalQuotient, finalRemainder } = computeEvents(dividend, divisor);
+  finalQ = finalQuotient; finalR = finalRemainder;
+  const built = buildSnapshots(dividend, divisor, events);
+  snapshots = built.snapshots.slice();
+  const last = snapshots[snapshots.length - 1] + '\n\n' + `Quotient: ${finalQ}\nRemainder: ${finalR}`;
+  snapshots.push(last);
+
+  idx = 0;
+  area.textContent = snapshots[idx];
+  status.textContent = `Step ${idx} / ${snapshots.length - 1}`;
+  nextBtn.disabled = (snapshots.length <= 1);
+  prevBtn.disabled = true;
+};
+
+nextBtn.onclick = () => {
+  if (idx < snapshots.length - 1) idx++;
+  area.textContent = snapshots[idx];
+  status.textContent = `Step ${idx} / ${snapshots.length - 1}`;
+  prevBtn.disabled = (idx === 0);
+  nextBtn.disabled = (idx === snapshots.length - 1);
+};
+
+prevBtn.onclick = () => {
+  if (idx > 0) idx--;
+  area.textContent = snapshots[idx];
+  status.textContent = `Step ${idx} / ${snapshots.length - 1}`;
+  prevBtn.disabled = (idx === 0);
+  nextBtn.disabled = (idx === snapshots.length - 1);
+};
+
+resetBtn.onclick = () => {
+  snapshots = []; idx = 0; finalQ = finalR = null;
+  area.textContent = '';
+  status.textContent = '';
+  nextBtn.disabled = prevBtn.disabled = true;
+};
+</script>
+</body>
+</html>
